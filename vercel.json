@@ -1,0 +1,81 @@
+// ─────────────────────────────────────────────
+//  AERONEXUS — Main Server (server.js)
+// ─────────────────────────────────────────────
+require('dotenv').config();
+const express    = require('express');
+const cors       = require('cors');
+const path       = require('path');
+const rateLimit  = require('express-rate-limit');
+
+const authRoutes     = require('./routes/auth');
+const productRoutes  = require('./routes/products');
+const reviewRoutes   = require('./routes/reviews');
+const orderRoutes    = require('./routes/orders');
+const uploadRoutes   = require('./routes/upload');
+const aiRoutes       = require('./routes/ai');
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+
+// ── Middleware ──────────────────────────────────────────────────────
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Serve static frontend and uploaded files
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Rate limiter — applied to all API routes
+const apiLimiter = rateLimit({
+  windowMs : 15 * 60 * 1000, // 15 minutes
+  max      : 200,
+  standardHeaders: true,
+  legacyHeaders  : false,
+  message  : { error: 'Too many requests, please try again later.' },
+});
+app.use('/api', apiLimiter);
+
+// Stricter limiter for auth routes
+const authLimiter = rateLimit({
+  windowMs : 15 * 60 * 1000,
+  max      : 20,
+  message  : { error: 'Too many login attempts, please wait.' },
+});
+
+// ── API Routes ──────────────────────────────────────────────────────
+app.use('/api/auth',     authLimiter, authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/reviews',  reviewRoutes);
+app.use('/api/orders',   orderRoutes);
+app.use('/api/upload',   uploadRoutes);
+app.use('/api/ai',       aiRoutes);
+
+// Health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'AERONEXUS API', timestamp: new Date().toISOString() });
+});
+
+// Catch-all: serve frontend index.html for SPA routing
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ── Global Error Handler ────────────────────────────────────────────
+app.use((err, _req, res, _next) => {
+  console.error('[AERONEXUS ERROR]', err.stack || err.message);
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
+
+// ── Start ───────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`
+  ▄████████████████████████████▄
+  ██  AERONEXUS  API  ONLINE   ██
+  ████████████████████████████████
+  → http://localhost:${PORT}
+  → Environment : ${process.env.NODE_ENV}
+  `);
+});
+
+module.exports = app;

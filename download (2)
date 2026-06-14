@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────
+#  AERONEXUS — Environment Configuration
+# ─────────────────────────────────────────────
+
+# Server
+PORT=3000
+NODE_ENV=development
+
+# JWT Secret (change this to a long random string in production!)
+JWT_SECRET=your_super_secret_jwt_key_change_me_in_production
+
+# Admin credentials (change in production)
+ADMIN_EMAIL=admin@aeronexus.com
+ADMIN_PASSWORD=aeronexus2024
+
+# File upload limits
+MAX_FILE_SIZE_MB=100
+
+# CORS origin (your frontend URL in production)
+CORS_ORIGIN=http://localhost:3000
+
+# Anthropic API key (for AI chat assistant & AI description generator)
+ANTHROPIC_API_KEY=

@@ -1,0 +1,228 @@
+// ─────────────────────────────────────────────
+//  AERONEXUS — In-Memory Data Store (db.js)
+//  Swap this module for a real DB (SQLite /
+//  Postgres / MongoDB) in production.
+// ─────────────────────────────────────────────
+const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
+
+// ── Seed products ───────────────────────────────────────────────────
+const SEED_PRODUCTS = [
+  {
+    id          : 'aero-seed-001',
+    type        : 'ebook',
+    title       : 'Aerospace Systems Design Handbook',
+    description : 'Comprehensive reference guide covering avionics, propulsion and structural engineering principles for modern aerospace systems.',
+    price       : 29.99,
+    fileSize    : '8.2 MB',
+    fileName    : 'aerospace-systems-handbook.pdf',
+    filePath    : null,
+    thumb       : null,
+    placeholder : true,
+    rating      : 4.7,
+    reviewCount : 23,
+    uploadedAt  : new Date().toISOString(),
+  },
+  {
+    id          : 'aero-seed-002',
+    type        : 'template',
+    title       : 'Flight Test Report Template',
+    description : 'Professional DOCX/PDF template for structured flight-test documentation used by certified test pilots.',
+    price       : 14.99,
+    fileSize    : '1.4 MB',
+    fileName    : 'flight-test-report-template.docx',
+    filePath    : null,
+    thumb       : null,
+    placeholder : true,
+    rating      : 4.9,
+    reviewCount : 11,
+    uploadedAt  : new Date().toISOString(),
+  },
+  {
+    id          : 'aero-seed-003',
+    type        : 'video',
+    title       : 'Introduction to Orbital Mechanics',
+    description : 'HD video lecture series — 6 hours of instruction on Kepler orbits, manoeuvres and re-entry physics.',
+    price       : 49.99,
+    fileSize    : '2.1 GB',
+    fileName    : 'orbital-mechanics-series.mp4',
+    filePath    : null,
+    thumb       : null,
+    placeholder : true,
+    rating      : 4.6,
+    reviewCount : 37,
+    uploadedAt  : new Date().toISOString(),
+  },
+  {
+    id          : 'aero-seed-004',
+    type        : 'template',
+    title       : 'Runway Analysis Spreadsheet',
+    description : 'Excel-based tool for takeoff & landing performance calculations across airport altitudes and temperatures.',
+    price       : 0,
+    fileSize    : '340 KB',
+    fileName    : 'runway-analysis.xlsx',
+    filePath    : null,
+    thumb       : null,
+    placeholder : true,
+    rating      : 4.5,
+    reviewCount : 58,
+    uploadedAt  : new Date().toISOString(),
+  },
+];
+
+// ── Seed reviews ────────────────────────────────────────────────────
+const SEED_REVIEWS = [
+  { id: uuidv4(), productId: 'aero-seed-001', userName: 'Capt. Mwangi', rating: 5, text: 'Excellent reference — use it daily in the design office.',  createdAt: new Date().toISOString() },
+  { id: uuidv4(), productId: 'aero-seed-001', userName: 'Sofia R.',     rating: 4, text: 'Very detailed. A few diagrams could be sharper.',            createdAt: new Date().toISOString() },
+  { id: uuidv4(), productId: 'aero-seed-003', userName: 'James T.',     rating: 5, text: 'Best orbital mechanics course I\'ve found online.',           createdAt: new Date().toISOString() },
+];
+
+// ── In-memory collections ───────────────────────────────────────────
+const db = {
+  users    : [],
+  products : [...SEED_PRODUCTS],
+  reviews  : [...SEED_REVIEWS],
+  orders   : [],
+
+  // ── Users ──────────────────────────────────────────────────────
+  createUser(name, email, passwordRaw) {
+    if (this.users.find(u => u.email === email)) {
+      throw Object.assign(new Error('Email already registered'), { status: 409 });
+    }
+    const hashed = bcrypt.hashSync(passwordRaw, 10);
+    const user = { id: uuidv4(), name, email, passwordHash: hashed, createdAt: new Date().toISOString() };
+    this.users.push(user);
+    return this._safeUser(user);
+  },
+
+  findUserByEmail(email) {
+    return this.users.find(u => u.email === email) || null;
+  },
+
+  findUserById(id) {
+    return this.users.find(u => u.id === id) || null;
+  },
+
+  verifyUserPassword(user, password) {
+    return bcrypt.compareSync(password, user.passwordHash);
+  },
+
+  _safeUser(u) {
+    const { passwordHash, ...safe } = u;
+    return safe;
+  },
+
+  // ── Products ───────────────────────────────────────────────────
+  getProducts({ type, search } = {}) {
+    let list = [...this.products];
+    if (type && type !== 'all') list = list.filter(p => p.type === type);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(p =>
+        p.title.toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  },
+
+  getProductById(id) {
+    return this.products.find(p => p.id === id) || null;
+  },
+
+  createProduct(data) {
+    const product = {
+      id          : 'aero-' + Date.now(),
+      type        : data.type       || 'template',
+      title       : data.title,
+      description : data.description || '',
+      price       : parseFloat(data.price) || 0,
+      fileSize    : data.fileSize   || '—',
+      fileName    : data.fileName   || null,
+      filePath    : data.filePath   || null,
+      thumb       : data.thumb      || null,
+      placeholder : false,
+      rating      : 0,
+      reviewCount : 0,
+      uploadedAt  : new Date().toISOString(),
+    };
+    this.products.unshift(product);
+    return product;
+  },
+
+  updateProduct(id, data) {
+    const idx = this.products.findIndex(p => p.id === id);
+    if (idx === -1) throw Object.assign(new Error('Product not found'), { status: 404 });
+    this.products[idx] = { ...this.products[idx], ...data, id };
+    return this.products[idx];
+  },
+
+  deleteProduct(id) {
+    const idx = this.products.findIndex(p => p.id === id);
+    if (idx === -1) throw Object.assign(new Error('Product not found'), { status: 404 });
+    this.products.splice(idx, 1);
+  },
+
+  // ── Reviews ────────────────────────────────────────────────────
+  getReviewsByProduct(productId) {
+    return this.reviews.filter(r => r.productId === productId);
+  },
+
+  addReview(productId, { userName, rating, text }) {
+    const product = this.getProductById(productId);
+    if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
+
+    const review = {
+      id        : uuidv4(),
+      productId,
+      userName  : userName || 'Anonymous',
+      rating    : Math.max(1, Math.min(5, parseInt(rating) || 5)),
+      text      : text || '',
+      createdAt : new Date().toISOString(),
+    };
+    this.reviews.push(review);
+
+    // Recalculate product rating
+    const allReviews = this.getReviewsByProduct(productId);
+    const avg = allReviews.reduce((s, r) => s + r.rating, 0) / allReviews.length;
+    product.rating      = Math.round(avg * 10) / 10;
+    product.reviewCount = allReviews.length;
+
+    return review;
+  },
+
+  // ── Orders ─────────────────────────────────────────────────────
+  createOrder({ productId, userName, userEmail, method, amountUsd, amountKes, ref }) {
+    const product = this.getProductById(productId);
+    if (!product) throw Object.assign(new Error('Product not found'), { status: 404 });
+
+    const order = {
+      id         : 'ORD-' + uuidv4().slice(0, 8).toUpperCase(),
+      productId,
+      productTitle: product.title,
+      userName   : userName  || 'Guest',
+      userEmail  : userEmail || '',
+      method,        // 'mpesa' | 'whatsapp'
+      amountUsd,
+      amountKes,
+      ref,
+      status     : 'pending', // pending | confirmed | delivered
+      createdAt  : new Date().toISOString(),
+    };
+    this.orders.push(order);
+    return order;
+  },
+
+  getOrders() {
+    return [...this.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  updateOrderStatus(id, status) {
+    const order = this.orders.find(o => o.id === id);
+    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
+    order.status = status;
+    return order;
+  },
+};
+
+module.exports = db;
